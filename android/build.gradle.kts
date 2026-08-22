@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 group = "com.jhomlala.better_player"
 version = "1.0-SNAPSHOT"
 
@@ -10,7 +12,7 @@ buildscript {
     }
 
     dependencies {
-        classpath("com.android.tools.build:gradle:8.7.0")
+        // classpath("com.android.tools.build:gradle:8.7.0")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
     }
 }
@@ -34,6 +36,12 @@ val lifecycleVersion = "2.4.0-beta01"
 val annotationVersion = "1.2.0"
 val workVersion = "2.7.0"
 
+kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11) 
+        }
+    }
+
 android {
     namespace = "com.jhomlala.better_player"
     compileSdk = 37
@@ -45,10 +53,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-    }
-
-    kotlinOptions {
-        jvmTarget = "11" 
     }
 
     sourceSets {
@@ -65,10 +69,17 @@ android {
             it.useJUnitPlatform()
 
             it.testLogging {
-                events("passed", "skipped", "failed", "standardOut", "standardError")
-                outputs.upToDateWhen { false }
+                events(
+                    "passed",
+                    "skipped",
+                    "failed",
+                    "standardOut",
+                    "standardError"
+                )
                 showStandardStreams = true
             }
+
+            it.outputs.upToDateWhen { false }
         }
     }
 }
