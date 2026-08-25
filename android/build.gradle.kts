@@ -11,9 +11,15 @@ buildscript {
         mavenCentral()
     }
 
+    val agpMajor = com.android.Version.ANDROID_GRADLE_PLUGIN_VERSION.substringBefore('.').toInt()
+
+    if (agpMajor < 9) {
+        apply(plugin = "org.jetbrains.kotlin.android")
+    }
+
     dependencies {
         // classpath("com.android.tools.build:gradle:8.7.0")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
+        // classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
     }
 }
 
@@ -26,21 +32,18 @@ allprojects {
 
 plugins {
     id("com.android.library")
-    kotlin("android")
 }
 
-// Define your dependency versions as standard Kotlin variables
-// val exoPlayerVersion = "2.19.1"
 val media3Version = "1.8.0"
 val lifecycleVersion = "2.4.0-beta01"
 val annotationVersion = "1.2.0"
 val workVersion = "2.7.0"
 
 kotlin {
-        compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_11) 
-        }
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_11) 
     }
+}
 
 android {
     namespace = "com.jhomlala.better_player"
