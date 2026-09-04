@@ -73,7 +73,7 @@ import com.jhomlala.better_player.DataSourceUtils.isHTTP
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.EventChannel.EventSink
 import io.flutter.plugin.common.MethodChannel
-import io.flutter.view.TextureRegistry.SurfaceTextureEntry
+import io.flutter.view.TextureRegistry
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.*
@@ -89,7 +89,7 @@ import androidx.media3.exoplayer.util.EventLogger
 internal class BetterPlayer(
     context: Context,
     private val eventChannel: EventChannel,
-    private val textureEntry: SurfaceTextureEntry,
+    private val surfaceProducer: TextureRegistry.SurfaceProducer,
     customDefaultLoadControl: CustomDefaultLoadControl?,
     result: MethodChannel.Result
 ) {
@@ -128,7 +128,7 @@ internal class BetterPlayer(
             .build()
         workManager = WorkManager.getInstance(context)
         workerObserverMap = HashMap()
-        setupVideoPlayer(eventChannel, textureEntry, result)
+        setupVideoPlayer(eventChannel, surfaceProducer, result)
     }
 
     fun setDataSource(
@@ -485,7 +485,7 @@ internal class BetterPlayer(
     }
 
     private fun setupVideoPlayer(
-        eventChannel: EventChannel, textureEntry: SurfaceTextureEntry, result: MethodChannel.Result
+        eventChannel: EventChannel, surfaceProducer: TextureRegistry.SurfaceProducer, result: MethodChannel.Result
     ) {
         eventChannel.setStreamHandler(
             object : EventChannel.StreamHandler {
@@ -497,12 +497,25 @@ internal class BetterPlayer(
                     eventSink.setDelegate(null)
                 }
             })
-        surface = Surface(textureEntry.surfaceTexture())
+        surface = surfaceProducer.surface
 //        androidx.media3.common.util.Log.setLogLevel()
 //        exoPlayer?.addAnalyticsListener(EventLogger("BetterPlayer"));
         exoPlayer?.setVideoSurface(surface)
         setAudioAttributes(exoPlayer, true)
         exoPlayer?.addListener(object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    val rotationDegrees = videoSize.unappliedRotationDegrees
+                    var width = videoSize.width
+                    var height = videoSize.height
+                    if (rotationDegrees == 90 || rotationDegrees == 270) {
+                        width = videoSize.height
+                        height = videoSize.width
+                    }
+                    surfaceProducer.setSize(width, height)
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_BUFFERING -> {
@@ -537,7 +550,7 @@ internal class BetterPlayer(
             }
         })
         val reply: MutableMap<String, Any> = HashMap()
-        reply["textureId"] = textureEntry.id()
+        reply["textureId"] = surfaceProducer.id()
         result.success(reply)
     }
 
@@ -732,16 +745,14 @@ internal class BetterPlayer(
     private fun setAudioTrack(rendererIndex: Int, groupIndex: Int, groupElementIndex: Int, context: Context) {
         val mappedTrackInfo = trackSelector.currentMappedTrackInfo
         if (mappedTrackInfo != null) {
-            val trackSelector = DefaultTrackSelector(context)
-            val trackSelectorParameters = trackSelector.parameters
-
             val trackGroups = mappedTrackInfo.getTrackGroups(rendererIndex)
-            val override = TrackSelectionOverride(trackGroups[groupIndex], listOf(0))
+            val override = TrackSelectionOverride(trackGroups[groupIndex], listOf(groupElementIndex))
 
             val builder = trackSelector.parameters.buildUpon()
                 .setRendererDisabled(rendererIndex, false)
+                .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
                 .addOverride(override)
-                   .build()
+                .build()
 
             trackSelector.setParameters(builder)
         }
@@ -765,7 +776,7 @@ internal class BetterPlayer(
         if (isInitialized) {
             exoPlayer?.stop()
         }
-        textureEntry.release()
+        surfaceProducer.release()
         eventChannel.setStreamHandler(null)
         surface?.release()
         exoPlayer?.release()
