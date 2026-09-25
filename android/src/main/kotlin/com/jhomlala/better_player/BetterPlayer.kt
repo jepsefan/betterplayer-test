@@ -512,7 +512,7 @@ internal class BetterPlayer(
                         width = videoSize.height
                         height = videoSize.width
                     }
-                    surfaceProducer.setSize(width, height)
+                    // Disabled for Android TV/Amlogic compatibility test.\n                    // surfaceProducer.setSize(width, height)
                 }
             }
 
