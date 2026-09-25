@@ -248,7 +248,7 @@ class _BetterPlayerSubtitlesDrawerState
 
       if (entry.subtitle.start! <= groupEnd!) {
         current.add(entry);
-        if (entry.subtitle.end! > groupEnd) {
+        if (entry.subtitle.end! > groupEnd!) {
           groupEnd = entry.subtitle.end;
         }
       } else {
@@ -269,7 +269,7 @@ class _BetterPlayerSubtitlesDrawerState
         return group;
       }
     }
-    return const [];
+    return const <_IndexedSubtitle>[];
   }
 
   bool _isActive(BetterPlayerSubtitle subtitle, Duration position) {
