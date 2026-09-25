@@ -80,21 +80,21 @@ class BetterPlayerSubtitlesFactory {
   }
 
   static List<BetterPlayerSubtitle> _parseString(String value) {
-    List<String> components = value.split('\r\n\r\n');
-    if (components.length == 1) {
-      components = value.split('\n\n');
-    }
+    final normalized = value.replaceAll('\r\n', '\n');
+    final bool isWebVTT = normalized.trimLeft().startsWith("WEBVTT");
+
+    final List<String> components =
+        isWebVTT ? _parseWebVttComponents(normalized) : normalized.split('\n\n');
 
     // Skip parsing files with no cues
-    if (components.length == 1) {
+    if (components.isEmpty) {
       return [];
     }
 
     final List<BetterPlayerSubtitle> subtitlesObj = [];
 
-    final bool isWebVTT = components.contains("WEBVTT");
     for (final component in components) {
-      if (component.isEmpty) {
+      if (component.trim().isEmpty || component.trim() == "WEBVTT") {
         continue;
       }
       final subtitle = BetterPlayerSubtitle(component, isWebVTT);
@@ -107,4 +107,63 @@ class BetterPlayerSubtitlesFactory {
 
     return subtitlesObj;
   }
-}
+
+  ///Build WebVTT cue components line-by-line instead of treating every blank
+  ///line as an unconditional cue boundary.
+  ///
+  ///Some subtitle providers emit visual status text as multiple blank-line
+  ///separated blocks under one timestamp. Those continuation blocks have no
+  ///timestamp of their own and should remain part of the preceding cue until
+  ///the next timestamp is encountered.
+  static List<String> _parseWebVttComponents(String value) {
+    final lines = value.split('\n');
+    final components = <String>[];
+    final current = <String>[];
+
+    bool hasTimestamp = false;
+
+    void flush() {
+      if (hasTimestamp && current.isNotEmpty) {
+        while (current.isNotEmpty && current.last.isEmpty) {
+          current.removeLast();
+        }
+        if (current.isNotEmpty) {
+          components.add(current.join('\n'));
+        }
+      }
+      current.clear();
+      hasTimestamp = false;
+    }
+
+    for (final rawLine in lines) {
+      final line = rawLine;
+      final trimmed = line.trim();
+
+      if (trimmed == "WEBVTT") {
+        continue;
+      }
+
+      // Ignore WebVTT metadata blocks rather than appending them as dialogue.
+      if (trimmed.startsWith("NOTE") ||
+          trimmed == "STYLE" ||
+          trimmed == "REGION") {
+        continue;
+      }
+
+      if (line.contains(BetterPlayerSubtitle.timerSeparator)) {
+        flush();
+        current.add(line);
+        hasTimestamp = true;
+        continue;
+      }
+
+      if (hasTimestamp) {
+        // Preserve internal blank lines. HtmlWidget/layout can then retain the
+        // intended separation between status fields such as Attack/Defense.
+        current.add(line);
+      }
+    }
+
+    flush();
+    return components;
+  }
