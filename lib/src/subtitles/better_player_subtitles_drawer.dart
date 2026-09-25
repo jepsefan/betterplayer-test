@@ -181,13 +181,16 @@ class _BetterPlayerSubtitlesDrawerState
           if (statusEntries.isNotEmpty)
             Align(
               alignment: Alignment.centerLeft,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: statusEntries
-                    .map((entry) => _buildReservedCue(entry, position,
-                        alignment: Alignment.centerLeft))
-                    .toList(),
+              child: FractionallySizedBox(
+                widthFactor: 0.48,
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: statusEntries
+                      .map((entry) => _buildReservedStatusCue(entry, position))
+                      .toList(),
+                ),
               ),
             ),
         ],
@@ -198,6 +201,29 @@ class _BetterPlayerSubtitlesDrawerState
   double get _effectiveBottomPadding => _playerVisible
       ? _configuration!.bottomPadding + 30
       : _configuration!.bottomPadding;
+
+  Widget _buildReservedStatusCue(
+    _IndexedSubtitle entry,
+    Duration position,
+  ) {
+    final visible = _isActive(entry.subtitle, position);
+    return Visibility(
+      visible: visible,
+      maintainState: true,
+      maintainAnimation: true,
+      maintainSize: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: (entry.subtitle.texts ?? const <String>[])
+            .map((text) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: _getTextWithStroke(text),
+                ))
+            .toList(),
+      ),
+    );
+  }
 
   Widget _buildReservedCue(
     _IndexedSubtitle entry,
