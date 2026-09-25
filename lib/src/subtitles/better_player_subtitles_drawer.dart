@@ -25,33 +25,27 @@ class BetterPlayerSubtitlesDrawer extends StatefulWidget {
 
 class _BetterPlayerSubtitlesDrawerState
     extends State<BetterPlayerSubtitlesDrawer> {
-  final RegExp htmlRegExp =
-      // ignore: unnecessary_raw_strings
-      RegExp(r"<[^>]*>", multiLine: true);
   late TextStyle _innerTextStyle;
   late TextStyle _outerTextStyle;
 
   VideoPlayerValue? _latestValue;
   BetterPlayerSubtitlesConfiguration? _configuration;
   bool _playerVisible = false;
-
-  ///Stream used to detect if play controls are visible or not
   late StreamSubscription _visibilityStreamSubscription;
 
   @override
   void initState() {
     _visibilityStreamSubscription =
         widget.playerVisibilityStream.listen((state) {
-      setState(() {
-        _playerVisible = state;
-      });
+      if (mounted) {
+        setState(() {
+          _playerVisible = state;
+        });
+      }
     });
 
-    if (widget.betterPlayerSubtitlesConfiguration != null) {
-      _configuration = widget.betterPlayerSubtitlesConfiguration;
-    } else {
-      _configuration = setupDefaultConfiguration();
-    }
+    _configuration = widget.betterPlayerSubtitlesConfiguration ??
+        setupDefaultConfiguration();
 
     widget.betterPlayerController.videoPlayerController!
         .addListener(_updateState);
@@ -80,7 +74,6 @@ class _BetterPlayerSubtitlesDrawerState
     super.dispose();
   }
 
-  ///Called when player state has changed, i.e. new player position, etc.
   void _updateState() {
     if (mounted) {
       setState(() {
@@ -92,6 +85,18 @@ class _BetterPlayerSubtitlesDrawerState
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<BetterPlayerSubtitleRenderer>(
+      valueListenable: widget.betterPlayerController.subtitleRenderer,
+      builder: (context, renderer, child) {
+        if (renderer == BetterPlayerSubtitleRenderer.stableOverlap) {
+          return _buildStableOverlap();
+        }
+        return _buildDefault();
+      },
+    );
+  }
+
+  Widget _buildDefault() {
     final BetterPlayerSubtitle? subtitle = _getSubtitleAtCurrentPosition();
     widget.betterPlayerController.renderedSubtitle = subtitle;
     final List<String> subtitles = subtitle?.texts ?? [];
@@ -103,9 +108,7 @@ class _BetterPlayerSubtitlesDrawerState
       width: double.infinity,
       child: Padding(
         padding: EdgeInsets.only(
-            bottom: _playerVisible
-                ? _configuration!.bottomPadding + 30
-                : _configuration!.bottomPadding,
+            bottom: _effectiveBottomPadding,
             left: _configuration!.leftPadding,
             right: _configuration!.rightPadding),
         child: Column(
@@ -114,6 +117,163 @@ class _BetterPlayerSubtitlesDrawerState
         ),
       ),
     );
+  }
+
+  Widget _buildStableOverlap() {
+    if (_latestValue == null) {
+      widget.betterPlayerController.renderedSubtitle = null;
+      return const SizedBox.expand();
+    }
+
+    final position = _latestValue!.position;
+    final group = _overlapGroupAt(position);
+    if (group.isEmpty) {
+      widget.betterPlayerController.renderedSubtitle = null;
+      return const SizedBox.expand();
+    }
+
+    final active = group
+        .where((entry) => _isActive(entry.subtitle, position))
+        .toList();
+    widget.betterPlayerController.renderedSubtitle =
+        active.isEmpty ? null : active.last.subtitle;
+
+    final startCounts = <Duration, int>{};
+    for (final entry in group) {
+      final start = entry.subtitle.start;
+      if (start != null) {
+        startCounts[start] = (startCounts[start] ?? 0) + 1;
+      }
+    }
+
+    final statusStarts = startCounts.entries
+        .where((entry) => entry.value >= 5)
+        .map((entry) => entry.key)
+        .toSet();
+
+    final statusEntries = group
+        .where((entry) => statusStarts.contains(entry.subtitle.start))
+        .toList();
+    final normalEntries = group
+        .where((entry) => !statusStarts.contains(entry.subtitle.start))
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: _effectiveBottomPadding,
+        left: _configuration!.leftPadding,
+        right: _configuration!.rightPadding,
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (normalEntries.isNotEmpty)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: normalEntries
+                    .map((entry) => _buildReservedCue(entry, position,
+                        alignment: _configuration!.alignment))
+                    .toList(),
+              ),
+            ),
+          if (statusEntries.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: statusEntries
+                    .map((entry) => _buildReservedCue(entry, position,
+                        alignment: Alignment.centerLeft))
+                    .toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  double get _effectiveBottomPadding => _playerVisible
+      ? _configuration!.bottomPadding + 30
+      : _configuration!.bottomPadding;
+
+  Widget _buildReservedCue(
+    _IndexedSubtitle entry,
+    Duration position, {
+    required Alignment alignment,
+  }) {
+    final visible = _isActive(entry.subtitle, position);
+    return Visibility(
+      visible: visible,
+      maintainState: true,
+      maintainAnimation: true,
+      maintainSize: true,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: entry.subtitle.texts
+            .map((text) =>
+                _buildSubtitleTextWidget(text, alignment: alignment))
+            .toList(),
+      ),
+    );
+  }
+
+  List<_IndexedSubtitle> _overlapGroupAt(Duration position) {
+    final lines = widget.betterPlayerController.subtitlesLines;
+    final indexed = <_IndexedSubtitle>[];
+
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].start != null && lines[i].end != null) {
+        indexed.add(_IndexedSubtitle(i, lines[i]));
+      }
+    }
+
+    indexed.sort((a, b) {
+      final byStart = a.subtitle.start!.compareTo(b.subtitle.start!);
+      return byStart != 0 ? byStart : a.index.compareTo(b.index);
+    });
+
+    final groups = <List<_IndexedSubtitle>>[];
+    var current = <_IndexedSubtitle>[];
+    Duration? groupEnd;
+
+    for (final entry in indexed) {
+      if (current.isEmpty) {
+        current = [entry];
+        groupEnd = entry.subtitle.end;
+        continue;
+      }
+
+      if (entry.subtitle.start! <= groupEnd!) {
+        current.add(entry);
+        if (entry.subtitle.end! > groupEnd) {
+          groupEnd = entry.subtitle.end;
+        }
+      } else {
+        groups.add(current);
+        current = [entry];
+        groupEnd = entry.subtitle.end;
+      }
+    }
+    if (current.isNotEmpty) groups.add(current);
+
+    for (final group in groups) {
+      final start = group.first.subtitle.start!;
+      var end = group.first.subtitle.end!;
+      for (final entry in group.skip(1)) {
+        if (entry.subtitle.end! > end) end = entry.subtitle.end!;
+      }
+      if (position >= start && position <= end) {
+        return group;
+      }
+    }
+    return const [];
+  }
+
+  bool _isActive(BetterPlayerSubtitle subtitle, Duration position) {
+    return subtitle.start! <= position && subtitle.end! >= position;
   }
 
   BetterPlayerSubtitle? _getSubtitleAtCurrentPosition() {
@@ -131,11 +291,12 @@ class _BetterPlayerSubtitlesDrawerState
     return null;
   }
 
-  Widget _buildSubtitleTextWidget(String subtitleText) {
+  Widget _buildSubtitleTextWidget(String subtitleText,
+      {Alignment? alignment}) {
     return Row(children: [
       Expanded(
         child: Align(
-          alignment: _configuration!.alignment,
+          alignment: alignment ?? _configuration!.alignment,
           child: _getTextWithStroke(subtitleText),
         ),
       ),
@@ -167,4 +328,11 @@ class _BetterPlayerSubtitlesDrawerState
   BetterPlayerSubtitlesConfiguration setupDefaultConfiguration() {
     return const BetterPlayerSubtitlesConfiguration();
   }
+}
+
+class _IndexedSubtitle {
+  final int index;
+  final BetterPlayerSubtitle subtitle;
+
+  const _IndexedSubtitle(this.index, this.subtitle);
 }
