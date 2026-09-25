@@ -167,3 +167,4 @@ class BetterPlayerSubtitlesFactory {
     flush();
     return components;
   }
+}
