@@ -210,6 +210,24 @@ class BetterPlayerController {
   ///Currently displayed [BetterPlayerSubtitle].
   BetterPlayerSubtitle? renderedSubtitle;
 
+  ///Runtime-selectable subtitle rendering strategy.
+  late final ValueNotifier<BetterPlayerSubtitleRenderer> subtitleRenderer =
+      ValueNotifier<BetterPlayerSubtitleRenderer>(
+          betterPlayerConfiguration.subtitlesConfiguration.renderer);
+
+  void setSubtitleRenderer(BetterPlayerSubtitleRenderer renderer) {
+    if (subtitleRenderer.value == renderer) return;
+    subtitleRenderer.value = renderer;
+  }
+
+  void toggleSubtitleRenderer() {
+    setSubtitleRenderer(
+      subtitleRenderer.value == BetterPlayerSubtitleRenderer.defaultRenderer
+          ? BetterPlayerSubtitleRenderer.stableOverlap
+          : BetterPlayerSubtitleRenderer.defaultRenderer,
+    );
+  }
+
   BetterPlayerController(
     this.betterPlayerConfiguration, {
     this.betterPlayerPlaylistConfiguration,
