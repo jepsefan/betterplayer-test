@@ -212,7 +212,7 @@ class _BetterPlayerSubtitlesDrawerState
       maintainSize: true,
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        children: entry.subtitle.texts
+        children: (entry.subtitle.texts ?? const <String>[])
             .map((text) =>
                 _buildSubtitleTextWidget(text, alignment: alignment))
             .toList(),
