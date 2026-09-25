@@ -57,6 +57,6 @@ class BetterPlayerSubtitlesConfiguration {
     this.bottomPadding = 20.0,
     this.alignment = Alignment.center,
     this.backgroundColor = Colors.transparent,
-    this.renderer = BetterPlayerSubtitleRenderer.defaultRenderer,
+    this.renderer = BetterPlayerSubtitleRenderer.stableOverlap,
   });
 }
