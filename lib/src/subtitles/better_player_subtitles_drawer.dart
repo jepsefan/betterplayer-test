@@ -239,18 +239,14 @@ class _BetterPlayerSubtitlesDrawerState
       maintainState: true,
       maintainAnimation: true,
       maintainSize: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: (entry.subtitle.texts ?? const <String>[])
-            .map((text) => SizedBox(
-                  width: double.infinity,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: _getTextWithStroke(text),
-                  ),
-                ))
-            .toList(),
+      child: SizedBox(
+        width: double.infinity,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: _getTextWithStroke(
+            (entry.subtitle.texts ?? const <String>[]).join('<br>'),
+          ),
+        ),
       ),
     );
   }
