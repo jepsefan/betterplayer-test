@@ -138,52 +138,39 @@ class _BetterPlayerSubtitlesDrawerState
     widget.betterPlayerController.renderedSubtitle =
         active.isEmpty ? null : active.last.subtitle;
 
-    final startCounts = <Duration, int>{};
-    for (final entry in group) {
-      final start = entry.subtitle.start;
-      if (start != null) {
-        startCounts[start] = (startCounts[start] ?? 0) + 1;
-      }
-    }
+    final statusEntries = group.where(_looksLikeStatusCue).toList();
+    final statusIndexes = statusEntries.map((entry) => entry.index).toSet();
+    final normalEntries =
+        group.where((entry) => !statusIndexes.contains(entry.index)).toList();
 
-    final statusStarts = startCounts.entries
-        .where((entry) => entry.value >= 5)
-        .map((entry) => entry.key)
-        .toSet();
-
-    final statusEntries = group
-        .where((entry) => statusStarts.contains(entry.subtitle.start))
-        .toList();
-    final normalEntries = group
-        .where((entry) => !statusStarts.contains(entry.subtitle.start))
-        .toList();
-
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: _effectiveBottomPadding,
-        left: _configuration!.leftPadding,
-        right: _configuration!.rightPadding,
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (normalEntries.isNotEmpty)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: normalEntries
-                    .map((entry) => _buildReservedCue(entry, position,
-                        alignment: _configuration!.alignment))
-                    .toList(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final leftWidth = constraints.maxWidth * 0.45;
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            Padding(
+              padding: EdgeInsets.only(
+                bottom: _effectiveBottomPadding,
+                left: _configuration!.leftPadding,
+                right: _configuration!.rightPadding,
+              ),
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: normalEntries
+                      .map((entry) => _buildReservedCue(entry, position,
+                          alignment: _configuration!.alignment))
+                      .toList(),
+                ),
               ),
             ),
-          if (statusEntries.isNotEmpty)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: 0.48,
-                alignment: Alignment.centerLeft,
+            if (statusEntries.isNotEmpty)
+              Positioned(
+                left: _configuration!.leftPadding + 16,
+                top: constraints.maxHeight * 0.18,
+                width: leftWidth,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,15 +179,55 @@ class _BetterPlayerSubtitlesDrawerState
                       .toList(),
                 ),
               ),
-            ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 
   double get _effectiveBottomPadding => _playerVisible
       ? _configuration!.bottomPadding + 30
       : _configuration!.bottomPadding;
+
+  bool _looksLikeStatusCue(_IndexedSubtitle entry) {
+    final text = (entry.subtitle.texts ?? const <String>[])
+        .join(' ')
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'\\s+'), ' ')
+        .trim()
+        .toLowerCase();
+
+    const keywords = <String>[
+      'attack',
+      'defense',
+      'magic',
+      'speed',
+      'equipment',
+      'skills',
+      'skill tree',
+      'skill points',
+      'class:',
+      'monster:',
+      'current stats',
+      'stats',
+    ];
+
+    if (keywords.any((keyword) => text.contains(keyword))) {
+      return true;
+    }
+
+    // UI/status screens commonly emit several short cues within a very small
+    // start-time window instead of giving every block exactly the same time.
+    final start = entry.subtitle.start;
+    if (start == null) return false;
+    var nearby = 0;
+    for (final candidate in widget.betterPlayerController.subtitlesLines) {
+      if (candidate.start == null || candidate.end == null) continue;
+      final delta = (candidate.start! - start).inMilliseconds.abs();
+      if (delta <= 20) nearby++;
+    }
+    return nearby >= 5;
+  }
 
   Widget _buildReservedStatusCue(
     _IndexedSubtitle entry,
@@ -216,9 +243,12 @@ class _BetterPlayerSubtitlesDrawerState
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: (entry.subtitle.texts ?? const <String>[])
-            .map((text) => Align(
-                  alignment: Alignment.centerLeft,
-                  child: _getTextWithStroke(text),
+            .map((text) => SizedBox(
+                  width: double.infinity,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _getTextWithStroke(text),
+                  ),
                 ))
             .toList(),
       ),
