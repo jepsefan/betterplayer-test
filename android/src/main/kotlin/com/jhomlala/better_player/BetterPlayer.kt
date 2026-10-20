@@ -112,6 +112,10 @@ internal class BetterPlayer(
     private val customDefaultLoadControl: CustomDefaultLoadControl =
         customDefaultLoadControl ?: CustomDefaultLoadControl()
     private var lastSendBufferedPosition = 0L
+    // Flutter's HLS audio index is the rendition order in EXT-X-MEDIA, NOT
+    // ExoPlayer's renderer/group index. Queue by label until track groups exist.
+    private var pendingAudioSelection: Pair<String, Int>? = null
+
 
     init {
         val loadBuilder = DefaultLoadControl.Builder()
@@ -148,6 +152,7 @@ internal class BetterPlayer(
         clearKey: String?
     ) {
         this.key = key
+        pendingAudioSelection = null
         isInitialized = false
         val uri = dataSource?.toUri()
         var dataSourceFactory: DataSource.Factory?
@@ -503,6 +508,12 @@ internal class BetterPlayer(
         exoPlayer?.setVideoSurface(surface)
         setAudioAttributes(exoPlayer, true)
         exoPlayer?.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                pendingAudioSelection?.let { (name, index) ->
+                    if (applyAudioTrack(name, index)) pendingAudioSelection = null
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
                     Player.STATE_BUFFERING -> {
@@ -678,58 +689,63 @@ internal class BetterPlayer(
         mediaSession = null
     }
 
+    /** Select by the unique HLS rendition NAME, not by an unrelated
+     * ExoPlayer renderer track-group index. The old implementation silently
+     * selected a wrong track or none when two languages shared a group.
+     *
+     * If Dart calls before the media is ready, retry on onTracksChanged.
+     * Do not fall back to the first audio track for a labeled request.
+     */
     fun setAudioTrack(name: String, index: Int, context: Context) {
+        pendingAudioSelection = name to index
         try {
-            val mappedTrackInfo = trackSelector.currentMappedTrackInfo
-            if (mappedTrackInfo != null) {
-                for (rendererIndex in 0 until mappedTrackInfo.rendererCount) {
-                    if (mappedTrackInfo.getRendererType(rendererIndex) != C.TRACK_TYPE_AUDIO) {
-                        continue
-                    }
-                    val trackGroupArray = mappedTrackInfo.getTrackGroups(rendererIndex)
-                    var hasElementWithoutLabel = false
-                    var hasStrangeAudioTrack = false
-                    for (groupIndex in 0 until trackGroupArray.length) {
-                        val group = trackGroupArray[groupIndex]
-                        for (groupElementIndex in 0 until group.length) {
-                            val format = group.getFormat(groupElementIndex)
-                            if (format.label == null) {
-                                hasElementWithoutLabel = true
-                            }
-                            if (format.id != null && format.id == "1/15") {
-                                hasStrangeAudioTrack = true
-                            }
-                        }
-                    }
-                    for (groupIndex in 0 until trackGroupArray.length) {
-                        val group = trackGroupArray[groupIndex]
-                        for (groupElementIndex in 0 until group.length) {
-                            val label = group.getFormat(groupElementIndex).label
-                            if (name == label && index == groupIndex) {
-                                setAudioTrack(rendererIndex, groupIndex, groupElementIndex, context = context)
-                                return
-                            }
-
-                            ///Fallback option
-                            if (!hasStrangeAudioTrack && hasElementWithoutLabel && index == groupIndex) {
-                                setAudioTrack(rendererIndex, groupIndex, groupElementIndex, context)
-                                return
-                            }
-                            ///Fallback option
-                            if (hasStrangeAudioTrack && name == label) {
-                                setAudioTrack(rendererIndex, groupIndex, groupElementIndex, context)
-                                return
-                            }
-                        }
-                    }
-                }
-            }
+            if (applyAudioTrack(name, index)) pendingAudioSelection = null
         } catch (exception: Exception) {
-            Log.e(TAG, "setAudioTrack failed$exception")
+            Log.e(TAG, "HLS audio track selection failed", exception)
         }
     }
 
-    private fun setAudioTrack(rendererIndex: Int, groupIndex: Int, groupElementIndex: Int, context: Context) {
+    private fun applyAudioTrack(name: String, index: Int): Boolean {
+        val info = trackSelector.currentMappedTrackInfo ?: return false
+        var unlabeled: Triple<Int, Int, Int>? = null
+        var unlabeledCount = 0
+        var anyLabels = false
+
+        for (renderer in 0 until info.rendererCount) {
+            if (info.getRendererType(renderer) != C.TRACK_TYPE_AUDIO) continue
+            val groups = info.getTrackGroups(renderer)
+            for (groupIndex in 0 until groups.length) {
+                val group = groups[groupIndex]
+                for (trackIndex in 0 until group.length) {
+                    val format = group.getFormat(trackIndex)
+                    val label = format.label
+                    if (!label.isNullOrBlank()) {
+                        anyLabels = true
+                        if (name == label) {
+                            setAudioTrack(renderer, groupIndex, trackIndex)
+                            return true
+                        }
+                    } else {
+                        if (unlabeledCount == index) {
+                            unlabeled = Triple(renderer, groupIndex, trackIndex)
+                        }
+                        unlabeledCount++
+                    }
+                }
+            }
+        }
+
+        // Preserve a controlled fallback only for older HLS tracks without
+        // labels. Never silently switch a named English request to Japanese.
+        if (!anyLabels && index >= 0 && unlabeled != null) {
+            val (renderer, group, track) = unlabeled
+            setAudioTrack(renderer, group, track)
+            return true
+        }
+        return false
+    }
+
+    private fun setAudioTrack(rendererIndex: Int, groupIndex: Int, groupElementIndex: Int) {
         val mappedTrackInfo = trackSelector.currentMappedTrackInfo
         if (mappedTrackInfo != null) {
             val trackGroups = mappedTrackInfo.getTrackGroups(rendererIndex)
