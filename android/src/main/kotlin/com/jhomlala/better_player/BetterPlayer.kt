@@ -705,11 +705,36 @@ internal class BetterPlayer(
         }
     }
 
+    /** Media3 does not guarantee that HLS EXT-X-MEDIA names are preserved as
+     * Format.label. Prefer a label match, then use actual Format.language.
+     * A playlist audio index is never assumed to be a TrackGroup index.
+     */
+    private fun audioLanguage(value: String?): String? {
+        val cleaned = value?.trim()?.lowercase(java.util.Locale.ROOT)
+            ?.substringBefore('_')?.substringBefore('-')?.substringBefore(' ')
+            ?: return null
+        return when (cleaned) {
+            "en", "eng", "english" -> "en"
+            "ja", "jp", "jpn", "japanese" -> "ja"
+            "de", "deu", "ger", "german" -> "de"
+            "fr", "fra", "fre", "french" -> "fr"
+            "es", "spa", "spanish" -> "es"
+            "it", "ita", "italian" -> "it"
+            else -> null
+        }
+    }
+
+    private fun cleanAudioLabel(name: String?): String =
+        name.orEmpty().trim().lowercase(java.util.Locale.ROOT)
+            .replace(Regex("_\\d+$"), "")
+
     private fun applyAudioTrack(name: String, index: Int): Boolean {
         val info = trackSelector.currentMappedTrackInfo ?: return false
-        var unlabeled: Triple<Int, Int, Int>? = null
-        var unlabeledCount = 0
-        var anyLabels = false
+        val requestedLabel = cleanAudioLabel(name)
+        val requestedLanguage = audioLanguage(name)
+        var bestScore = -1
+        var selected: Triple<Int, Int, Int>? = null
+        var ordinal = 0
 
         for (renderer in 0 until info.rendererCount) {
             if (info.getRendererType(renderer) != C.TRACK_TYPE_AUDIO) continue
@@ -718,31 +743,32 @@ internal class BetterPlayer(
                 val group = groups[groupIndex]
                 for (trackIndex in 0 until group.length) {
                     val format = group.getFormat(trackIndex)
-                    val label = format.label
-                    if (!label.isNullOrBlank()) {
-                        anyLabels = true
-                        if (name == label) {
-                            setAudioTrack(renderer, groupIndex, trackIndex)
-                            return true
-                        }
-                    } else {
-                        if (unlabeledCount == index) {
-                            unlabeled = Triple(renderer, groupIndex, trackIndex)
-                        }
-                        unlabeledCount++
+                    val label = cleanAudioLabel(format.label)
+                    val language = audioLanguage(format.language)
+                        ?: audioLanguage(format.label)
+                    val score = when {
+                        format.label?.equals(name, ignoreCase = true) == true -> 100
+                        label.isNotEmpty() && label == requestedLabel -> 90
+                        requestedLanguage != null && language == requestedLanguage -> 80
+                        // Only use the playlist ordinal for otherwise
+                        // unidentified audio tracks.
+                        label.isEmpty() && language == null && ordinal == index -> 10
+                        else -> -1
                     }
+                    if (score > bestScore) {
+                        bestScore = score
+                        if (score > -1) selected = Triple(renderer, groupIndex, trackIndex)
+                    }
+                    ordinal++
                 }
             }
         }
 
-        // Preserve a controlled fallback only for older HLS tracks without
-        // labels. Never silently switch a named English request to Japanese.
-        if (!anyLabels && index >= 0 && unlabeled != null) {
-            val (renderer, group, track) = unlabeled
-            setAudioTrack(renderer, group, track)
-            return true
-        }
-        return false
+        val target = selected ?: return false
+        val (renderer, group, track) = target
+        setAudioTrack(renderer, group, track)
+        Log.d(TAG, "Selected HLS audio rendition by score=$bestScore")
+        return true
     }
 
     private fun setAudioTrack(rendererIndex: Int, groupIndex: Int, groupElementIndex: Int) {
