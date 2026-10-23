@@ -689,6 +689,54 @@ internal class BetterPlayer(
         mediaSession = null
     }
 
+    /** List actual ExoPlayer audio streams, including those embedded in MKV.
+     * Renderer/group/track identifiers are valid only for the current media.
+     * Never expose stream URLs or request headers.
+     */
+    fun embeddedAudioTracks(): List<Map<String, Any>> {
+        val info = trackSelector.currentMappedTrackInfo ?: return emptyList()
+        val result = mutableListOf<Map<String, Any>>()
+        for (renderer in 0 until info.rendererCount) {
+            if (info.getRendererType(renderer) != C.TRACK_TYPE_AUDIO) continue
+            val groups = info.getTrackGroups(renderer)
+            for (groupIndex in 0 until groups.length) {
+                val group = groups[groupIndex]
+                for (trackIndex in 0 until group.length) {
+                    if (info.getTrackSupport(renderer, groupIndex, trackIndex) != C.FORMAT_HANDLED) continue
+                    val format = group.getFormat(trackIndex)
+                    val lang = format.language.orEmpty()
+                    val label = format.label?.takeIf { it.isNotBlank() }
+                        ?: lang.takeIf { it.isNotBlank() && it != "und" }
+                        ?: "Audio ${result.size + 1}"
+                    result.add(mapOf(
+                        "label" to label,
+                        "language" to lang,
+                        "renderer" to renderer,
+                        "group" to groupIndex,
+                        "track" to trackIndex
+                    ))
+                }
+            }
+        }
+        return result
+    }
+
+    /** Select an identified in-container track. Validate all indices so
+     * stale UI selections from a different episode can never select another.
+     */
+    fun selectEmbeddedAudio(renderer: Int, group: Int, track: Int): Boolean {
+        val info = trackSelector.currentMappedTrackInfo ?: return false
+        if (renderer !in 0 until info.rendererCount ||
+            info.getRendererType(renderer) != C.TRACK_TYPE_AUDIO) return false
+        val groups = info.getTrackGroups(renderer)
+        if (group !in 0 until groups.length ||
+            track !in 0 until groups[group].length ||
+            info.getTrackSupport(renderer, group, track) != C.FORMAT_HANDLED) return false
+        pendingAudioSelection = null
+        setAudioTrack(renderer, group, track)
+        return true
+    }
+
     /** Select by the unique HLS rendition NAME, not by an unrelated
      * ExoPlayer renderer track-group index. The old implementation silently
      * selected a wrong track or none when two languages shared a group.
