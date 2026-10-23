@@ -201,6 +201,14 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
             IS_PICTURE_IN_PICTURE_SUPPORTED_METHOD -> result.success(
                 isPictureInPictureSupported()
             )
+            "getEmbeddedAudioTracks" -> result.success(player.embeddedAudioTracks())
+            "selectEmbeddedAudioTrack" -> {
+                val renderer = call.argument<Int>("renderer")
+                val group = call.argument<Int>("group")
+                val track = call.argument<Int>("track")
+                result.success(renderer != null && group != null && track != null &&
+                    player.selectEmbeddedAudio(renderer, group, track))
+            }
             SET_AUDIO_TRACK_METHOD -> {
                 val name = call.argument<String?>(NAME_PARAMETER)
                 val index = call.argument<Int?>(INDEX_PARAMETER)
