@@ -544,7 +544,39 @@ internal class BetterPlayer(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                eventSink.error("VideoError", "Video player had error $error", "")
+                // Show only stable error classifications. Playback exceptions
+                // often include signed HLS URLs, tokens or request headers in
+                // their raw message; those must never reach Flutter logs.
+                val causes = mutableListOf<String>()
+                var httpStatus: Int? = null
+                var current: Throwable? = error
+                repeat(8) {
+                    val issue = current ?: return@repeat
+                    val causeType = issue.javaClass.simpleName
+                    if (causeType.isNotEmpty() && causes.lastOrNull() != causeType) {
+                        causes.add(causeType.take(64))
+                    }
+                    if (issue is androidx.media3.datasource.HttpDataSource.InvalidResponseCodeException) {
+                        httpStatus = issue.responseCode
+                    }
+                    current = issue.cause
+                }
+                val reason = buildString {
+                    append("media3Code=")
+                    append(error.errorCode)
+                    append(" (")
+                    append(error.errorCodeName)
+                    append(")")
+                    if (httpStatus != null) {
+                        append(", httpStatus=")
+                        append(httpStatus)
+                    }
+                    if (causes.isNotEmpty()) {
+                        append(", causeTypes=")
+                        append(causes.joinToString(">"))
+                    }
+                }
+                eventSink.error("VideoError", "Playback failed: $reason", "")
             }
         })
         val reply: MutableMap<String, Any> = HashMap()
