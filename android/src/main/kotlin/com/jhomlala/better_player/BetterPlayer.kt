@@ -142,6 +142,7 @@ internal class BetterPlayer(
         formatHint: String?,
         result: MethodChannel.Result,
         headers: Map<String, String>?,
+        shareWebViewCookies: Boolean,
         useCache: Boolean,
         maxCacheSize: Long,
         maxCacheFileSize: Long,
@@ -194,7 +195,35 @@ internal class BetterPlayer(
             drmSessionManager = null
         }
         if (isHTTP(uri)) {
-            dataSourceFactory = getDataSourceFactory(userAgent, headers)
+            dataSourceFactory = if (shareWebViewCookies) {
+                // Only explicitly approved extension streams use native cookies.
+                // Read host-scoped cookies inside the network interceptor on
+                // each media request (master, variant, segment, key, redirect).
+                val client = okhttp3.OkHttpClient.Builder()
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .addNetworkInterceptor { chain ->
+                        val request = chain.request()
+                        val uri = request.url
+                        val existing = request.header("Cookie")
+                        val cookie = if (existing == null && uri.isHttps) {
+                            try {
+                                android.webkit.CookieManager.getInstance()
+                                    .getCookie(uri.toString())
+                            } catch (_: Throwable) {
+                                null
+                            }
+                        } else null
+                        val forwarded = if (!cookie.isNullOrBlank()) {
+                            request.newBuilder().header("Cookie", cookie).build()
+                        } else request
+                        chain.proceed(forwarded)
+                    }.build()
+                androidx.media3.datasource.okhttp.OkHttpDataSource.Factory(client)
+                    .setDefaultRequestProperties(headers ?: emptyMap())
+            } else {
+                getDataSourceFactory(userAgent, headers)
+            }
             if (useCache && maxCacheSize > 0 && maxCacheFileSize > 0) {
                 dataSourceFactory = CacheDataSourceFactory(
                     context,
