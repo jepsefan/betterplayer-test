@@ -485,6 +485,7 @@ class BetterPlayerController {
         await videoPlayerController?.setNetworkDataSource(
           betterPlayerDataSource.url,
           headers: _getHeaders(),
+          shareWebViewCookies: _betterPlayerDataSource!.shareWebViewCookies,
           useCache:
               _betterPlayerDataSource!.cacheConfiguration?.useCache ?? false,
           maxCacheSize:
