@@ -211,6 +211,7 @@ class DataSource {
     this.asset,
     this.package,
     this.headers,
+    this.shareWebViewCookies = false,
     this.useCache = false,
     this.maxCacheSize = _maxCacheSize,
     this.maxCacheFileSize = _maxCacheFileSize,
@@ -272,6 +273,9 @@ class DataSource {
   final String? package;
 
   final Map<String, String?>? headers;
+
+  /// Android-only host-scoped WebView cookie sharing for extension streams.
+  final bool shareWebViewCookies;
 
   final bool useCache;
 
