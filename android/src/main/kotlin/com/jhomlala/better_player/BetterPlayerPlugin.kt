@@ -250,6 +250,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
         dataSources.put(getTextureId(player)!!, dataSource)
         val key = getParameter(dataSource, KEY_PARAMETER, "")
         val headers: Map<String, String> = getParameter(dataSource, HEADERS_PARAMETER, HashMap())
+        val shareWebViewCookies: Boolean = getParameter(dataSource, "shareWebViewCookies", false)
         val overriddenDuration: Number = getParameter(dataSource, OVERRIDDEN_DURATION_PARAMETER, 0)
         if (dataSource[ASSET_PARAMETER] != null) {
             val asset = getParameter(dataSource, ASSET_PARAMETER, "")
@@ -270,6 +271,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 null,
                 result,
                 headers,
+                false,
                 false,
                 0L,
                 0L,
@@ -298,6 +300,7 @@ class BetterPlayerPlugin : FlutterPlugin, ActivityAware, MethodCallHandler {
                 formatHint,
                 result,
                 headers,
+                shareWebViewCookies,
                 useCache,
                 maxCacheSize,
                 maxCacheFileSize,
