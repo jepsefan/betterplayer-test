@@ -26,6 +26,10 @@ class BetterPlayerDataSource {
   /// Custom headers for player
   final Map<String, String>? headers;
 
+  /// For extension streams, share Android WebView's domain-scoped cookies
+  /// with the native OkHttp media reader without exposing them to Flutter.
+  final bool shareWebViewCookies;
+
   ///Should player use hls / dash subtitles (ASMS - Adaptive Streaming Media Sources).
   final bool? useAsmsSubtitles;
 
@@ -83,6 +87,7 @@ class BetterPlayerDataSource {
     this.subtitles,
     this.liveStream = false,
     this.headers,
+    this.shareWebViewCookies = false,
     this.useAsmsSubtitles = true,
     this.useAsmsTracks = true,
     this.useAsmsAudioTracks = true,
@@ -113,6 +118,7 @@ class BetterPlayerDataSource {
     List<BetterPlayerSubtitlesSource>? subtitles,
     bool? liveStream,
     Map<String, String>? headers,
+    bool shareWebViewCookies = false,
     bool? useAsmsSubtitles,
     bool? useAsmsTracks,
     bool? useAsmsAudioTracks,
@@ -133,6 +139,7 @@ class BetterPlayerDataSource {
       subtitles: subtitles,
       liveStream: liveStream,
       headers: headers,
+      shareWebViewCookies: shareWebViewCookies,
       useAsmsSubtitles: useAsmsSubtitles,
       useAsmsTracks: useAsmsTracks,
       useAsmsAudioTracks: useAsmsAudioTracks,
@@ -213,6 +220,7 @@ class BetterPlayerDataSource {
     List<BetterPlayerSubtitlesSource>? subtitles,
     bool? liveStream,
     Map<String, String>? headers,
+    bool? shareWebViewCookies,
     bool? useAsmsSubtitles,
     bool? useAsmsTracks,
     bool? useAsmsAudioTracks,
@@ -235,6 +243,7 @@ class BetterPlayerDataSource {
       subtitles: subtitles ?? this.subtitles,
       liveStream: liveStream ?? this.liveStream,
       headers: headers ?? this.headers,
+      shareWebViewCookies: shareWebViewCookies ?? this.shareWebViewCookies,
       useAsmsSubtitles: useAsmsSubtitles ?? this.useAsmsSubtitles,
       useAsmsTracks: useAsmsTracks ?? this.useAsmsTracks,
       useAsmsAudioTracks: useAsmsAudioTracks ?? this.useAsmsAudioTracks,
