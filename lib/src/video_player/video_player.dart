@@ -319,6 +319,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
     String dataSource, {
     VideoFormat? formatHint,
     Map<String, String?>? headers,
+    bool shareWebViewCookies = false,
     bool useCache = false,
     int? maxCacheSize,
     int? maxCacheFileSize,
@@ -342,6 +343,7 @@ class VideoPlayerController extends ValueNotifier<VideoPlayerValue> {
         uri: dataSource,
         formatHint: formatHint,
         headers: headers,
+        shareWebViewCookies: shareWebViewCookies,
         useCache: useCache,
         maxCacheSize: maxCacheSize,
         maxCacheFileSize: maxCacheFileSize,
