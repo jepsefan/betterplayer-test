@@ -79,6 +79,7 @@ class MethodChannelVideoPlayer extends VideoPlayerPlatform {
           'uri': dataSource.uri,
           'formatHint': dataSource.rawFormalHint,
           'headers': dataSource.headers,
+          'shareWebViewCookies': dataSource.shareWebViewCookies,
           'useCache': dataSource.useCache,
           'maxCacheSize': dataSource.maxCacheSize,
           'maxCacheFileSize': dataSource.maxCacheFileSize,
